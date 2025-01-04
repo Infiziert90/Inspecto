@@ -1,0 +1,13 @@
+{
+  "Author": "Infi",
+  "Name": "Inspecto",
+  "Punchline": "Look back at that cute search comment even hours later~",
+  "Description": "A simple plugin that keeps a history of people you inspected.",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "Plugin",
+    "Inspect",
+    "Examine",
+    "History"
+  ]
+}
