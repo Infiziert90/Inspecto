@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Dalamud.NET.SDK/11.0.0">
+<Project Sdk="Dalamud.NET.Sdk/12.0.2">
     <PropertyGroup>
-        <Version>0.0.0.2</Version>
+        <Version>0.0.0.3</Version>
         <PackageProjectUrl>https://github.com/Infiziert90/Inspecto</PackageProjectUrl>
         <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
         <IsPackable>false</IsPackable>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.6" />
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.7" />
         <Reference Include="SharpDX" Private="false" />
         <Reference Include="SharpDX.Direct3D11" Private="false" />
         <Reference Include="SharpDX.DXGI" Private="false" />
