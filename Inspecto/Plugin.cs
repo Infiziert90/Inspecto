@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using System.Linq;
 using System.Timers;
 using Dalamud.Game.Addon.Lifecycle;
@@ -14,33 +13,30 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
-using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
-using FFXIVClientStructs.FFXIV.Client.Graphics.Render;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Inspecto.Data;
 using Inspecto.Windows;
 using Inspecto.Windows.Config;
 using Lumina.Excel.Sheets;
 using Lumina.Text.ReadOnly;
-using SharpDX;
-using SharpDX.Direct3D11;
-using SharpDX.DXGI;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 
 using ObjectKind = Dalamud.Game.ClientState.Objects.Enums.ObjectKind;
 
 namespace Inspecto;
 
+#pragma warning disable SeStringEvaluator
 public sealed class Plugin : IDalamudPlugin
 {
-    [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
-    [PluginService] internal static ITextureProvider TextureProvider { get; private set; } = null!;
-    [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
-    [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
-    [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
-    [PluginService] internal static IDataManager Data { get; private set; } = null!;
-    [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+    [PluginService] public static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
+    [PluginService] public static ITextureProvider TextureProvider { get; private set; } = null!;
+    [PluginService] public static IFramework Framework { get; private set; } = null!;
+    [PluginService] public static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
+    [PluginService] public static ICommandManager CommandManager { get; private set; } = null!;
+    [PluginService] public static IObjectTable ObjectTable { get; private set; } = null!;
+    [PluginService] public static IDataManager Data { get; private set; } = null!;
+    [PluginService] public static IGameInteropProvider Hook { get; private set; } = null!;
+    [PluginService] public static IPluginLog Log { get; private set; } = null!;
+    [PluginService] public static ISeStringEvaluator Evaluator { get; set; } = null!;
 
     private const string CommandName = "/insp";
 
@@ -53,6 +49,8 @@ public sealed class Plugin : IDalamudPlugin
     private bool PrintDone;
     private bool ShouldRefreshImage;
     private readonly Timer RefreshTimer = new();
+
+    private readonly HookManager HookManager;
 
     public Plugin()
     {
@@ -77,6 +75,8 @@ public sealed class Plugin : IDalamudPlugin
         RefreshTimer.Interval = Configuration.ImageRefreshTimer;
         RefreshTimer.Elapsed += (_, _) => { ShouldRefreshImage = true; };
 
+        HookManager = new HookManager();
+
         AddonLifecycle.RegisterListener(AddonEvent.PreFinalize, "CharacterInspect", AfterInspect);
         AddonLifecycle.RegisterListener(AddonEvent.PostDraw, "CharacterInspect", OnInspect);
     }
@@ -86,6 +86,8 @@ public sealed class Plugin : IDalamudPlugin
         WindowSystem.RemoveAllWindows();
         ConfigWindow.Dispose();
         MainWindow.Dispose();
+
+        HookManager.Dispose();
 
         AddonLifecycle.UnregisterListener(AddonEvent.PreFinalize, "CharacterInspect", AfterInspect);
         AddonLifecycle.UnregisterListener(AddonEvent.PostDraw, "CharacterInspect", OnInspect);
@@ -146,11 +148,9 @@ public sealed class Plugin : IDalamudPlugin
             var inspect = UIState.Instance()->Inspect;
             var characterObject = (Character*)character.Address;
 
-            var texture = RenderTargetManager.Instance()->GetCharaViewTexture(1);
-            var image = GetKernelTextureAsImage(texture);
-            var specs = RawImageSpecification.Bgra32(image.Width, image.Height);
-
-            var textureWrap = image.Data.Length > 0 ? TextureProvider.CreateFromRaw(specs, image.Data) : TextureProvider.CreateEmpty(specs, false, false);
+            // Fill the character object with a empty texture as placeholder
+            var specs = RawImageSpecification.Bgra32(720, 480);
+            var textureWrap = TextureProvider.CreateEmpty(specs, false, false);
 
             var characterInspect = new CharacterInspect
             {
@@ -201,17 +201,42 @@ public sealed class Plugin : IDalamudPlugin
                 return;
             }
 
-            // This works because RenderTargetManager doesn't flush the textures
-            // 1 is the index used for Inspect
-            var texture = RenderTargetManager.Instance()->GetCharaViewTexture(1);
-            var image = GetKernelTextureAsImage(texture);
-            if (image.Data.Length > 0)
-                existingEntry.Image = TextureProvider.CreateFromRaw(RawImageSpecification.Bgra32(image.Width, image.Height), image.Data);
+            // Proceed to request the correct texture from the render thread
+            HookManager.RequestCharacterInpectTexture = true;
 
-            existingEntry.EntityId = 0;
+            // Delay for the texture to be fully loaded
+            Framework.RunOnTick(() =>
+            {
+                try
+                {
+                    if (HookManager.RequestCharacterInpectTexture)
+                    {
+                        Log.Error("Still requesting image!");
+                        return;
+                    }
 
-            // Overwrite the entry with our refreshed image
-            MainWindow.InspectHistory[existingEntry.ContentId] = existingEntry;
+                    // This works because RenderTargetManager doesn't flush the textures
+                    // 1 is the index used for Inspect
+                    var image = HookManager.CharacterInspectionTexture;
+                    if (image == null)
+                    {
+                        Log.Error("No image data was written!");
+                        return;
+                    }
+
+                    if (image.Value.Data.Length > 0)
+                        existingEntry.Image = TextureProvider.CreateFromRaw(RawImageSpecification.Bgra32(image.Value.Width, image.Value.Height), image.Value.Data);
+
+                    existingEntry.EntityId = 0;
+
+                    // Overwrite the entry with our refreshed image
+                    MainWindow.InspectHistory[existingEntry.ContentId] = existingEntry;
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Inner delay went wrong");
+                }
+            }, delayTicks: 5);
         }
         catch (Exception ex)
         {
@@ -226,49 +251,6 @@ public sealed class Plugin : IDalamudPlugin
         ShouldRefreshImage = false;
 
         RefreshTimer.Stop();
-    }
-
-    private unsafe (byte[] Data, int Width, int Height) GetKernelTextureAsImage(Texture* tex)
-    {
-        if (tex == null || tex->D3D11Texture2D == null)
-            return ([], 0, 0);
-
-        var device = PluginInterface.UiBuilder.Device;
-        var texture = CppObject.FromPointer<Texture2D>((nint)tex->D3D11Texture2D);
-
-        // thanks to ChatGPT
-        // Get the texture description
-        var desc = texture.Description;
-
-        // Create a staging texture with the same description
-        using var stagingTexture = new Texture2D(device, new Texture2DDescription()
-        {
-            ArraySize = 1,
-            BindFlags = BindFlags.None,
-            CpuAccessFlags = CpuAccessFlags.Read,
-            Format = desc.Format,
-            Height = desc.Height,
-            Width = desc.Width,
-            MipLevels = 1,
-            OptionFlags = desc.OptionFlags,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Staging
-        });
-
-        // Copy the texture data to the staging texture
-        device.ImmediateContext.CopyResource(texture, stagingTexture);
-
-        // Map the staging texture
-        device.ImmediateContext.MapSubresource(stagingTexture, 0, MapMode.Read, SharpDX.Direct3D11.MapFlags.None, out var dataStream);
-
-        using var pixelDataStream = new MemoryStream();
-        dataStream.CopyTo(pixelDataStream);
-
-        // Unmap the staging texture
-        device.ImmediateContext.UnmapSubresource(stagingTexture, 0);
-
-        var data = Image.LoadPixelData<Bgra32>(pixelDataStream.ToArray(), desc.Width, desc.Height).ImageToRaw();
-        return (data, desc.Width, desc.Height);
     }
 
     private void OnCommand(string command, string args)

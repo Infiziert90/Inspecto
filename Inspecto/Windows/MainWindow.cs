@@ -14,6 +14,7 @@ using Dalamud.Utility;
 using ImGuiNET;
 using Inspecto.Data;
 using Lumina.Data.Files;
+using Lumina.Excel.Sheets;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -169,7 +170,13 @@ public class MainWindow : Window, IDisposable
                 ImGui.SetCursorPos(currentPos);
                 var iconTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(gearInSlot.Value.Icon)).GetWrapOrDefault();
                 if (iconTexture is not null)
+                {
                     ImGui.Image(iconTexture.ImGuiHandle, scaledItemFrameSize);
+
+                    if (ImGui.IsItemHovered())
+                        GenerateItemTooltip(gearInSlot.Value);
+                }
+
             }
         }
 
@@ -191,7 +198,12 @@ public class MainWindow : Window, IDisposable
                 ImGui.SetCursorPos(currentPos);
                 var iconTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(gearInSlot.Value.Icon)).GetWrapOrDefault();
                 if (iconTexture is not null)
+                {
                     ImGui.Image(iconTexture.ImGuiHandle, scaledItemFrameSize);
+
+                    if (ImGui.IsItemHovered())
+                        GenerateItemTooltip(gearInSlot.Value);
+                }
             }
 
             ImGui.SetCursorPos(ImGui.GetCursorPos() with {X = bigImageOffsetRight});
@@ -204,5 +216,19 @@ public class MainWindow : Window, IDisposable
 
         ImGui.SetCursorPos(startPos with { X = bigImageOffset + scaledImageSize.X - textSize.X - scaledItemLevelSize.X });
         ImGui.Image(ItemLevelTexture.ImGuiHandle, scaledItemLevelSize);
+    }
+
+    private void GenerateItemTooltip(Item item)
+    {
+        using (ImRaii.Tooltip())
+        using (ImRaii.TextWrapPos(ImGui.GetFontSize() * 200.0f))
+        {
+            Helper.WrappedTextWithColor(ImGuiColors.ParsedGreen, Plugin.Evaluator.Evaluate(item.Name).ExtractText());
+            ImGuiHelpers.ScaledDummy(1.0f);
+            ImGui.Separator();
+            ImGuiHelpers.ScaledDummy(1.0f);
+            ImGui.TextUnformatted($"Item Level: {item.LevelItem.RowId}");
+            ImGui.TextUnformatted($"Lv: {item.LevelEquip}");
+        }
     }
 }
