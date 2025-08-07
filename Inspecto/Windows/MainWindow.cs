@@ -11,7 +11,7 @@ using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using Dalamud.Utility;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using Inspecto.Data;
 using Lumina.Data.Files;
 using Lumina.Excel.Sheets;
@@ -162,7 +162,7 @@ public class MainWindow : Window, IDisposable
         for (var i = 0; i < 6; i++)
         {
             var currentPos = ImGui.GetCursorPos();
-            ImGui.Image(ItemFrameTexture[i].ImGuiHandle, scaledItemFrameSize);
+            ImGui.Image(ItemFrameTexture[i].Handle, scaledItemFrameSize);
 
             var gearInSlot = inspect.GetEquippedGearByIndex(i);
             if (gearInSlot is not null)
@@ -171,7 +171,7 @@ public class MainWindow : Window, IDisposable
                 var iconTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(gearInSlot.Value.Icon)).GetWrapOrDefault();
                 if (iconTexture is not null)
                 {
-                    ImGui.Image(iconTexture.ImGuiHandle, scaledItemFrameSize);
+                    ImGui.Image(iconTexture.Handle, scaledItemFrameSize);
 
                     if (ImGui.IsItemHovered())
                         GenerateItemTooltip(gearInSlot.Value);
@@ -183,14 +183,14 @@ public class MainWindow : Window, IDisposable
         var bigImageOffset = startPos.X + scaledItemFrameSize.X + ItemFrameSpacing;
         ImGui.SetCursorPos(startPos with {X = bigImageOffset});
 
-        ImGui.Image(inspect.Image.ImGuiHandle, scaledImageSize);
+        ImGui.Image(inspect.Image.Handle, scaledImageSize);
 
         var bigImageOffsetRight = bigImageOffset + scaledImageSize.X + ItemFrameSpacing;
         ImGui.SetCursorPos(startPos with {X = bigImageOffsetRight});
         for (var i = 6; i < 12; i++)
         {
             var currentPos = ImGui.GetCursorPos();
-            ImGui.Image(ItemFrameTexture[i].ImGuiHandle, scaledItemFrameSize);
+            ImGui.Image(ItemFrameTexture[i].Handle, scaledItemFrameSize);
 
             var gearInSlot = inspect.GetEquippedGearByIndex(i);
             if (gearInSlot is not null)
@@ -199,7 +199,7 @@ public class MainWindow : Window, IDisposable
                 var iconTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(gearInSlot.Value.Icon)).GetWrapOrDefault();
                 if (iconTexture is not null)
                 {
-                    ImGui.Image(iconTexture.ImGuiHandle, scaledItemFrameSize);
+                    ImGui.Image(iconTexture.Handle, scaledItemFrameSize);
 
                     if (ImGui.IsItemHovered())
                         GenerateItemTooltip(gearInSlot.Value);
@@ -215,7 +215,7 @@ public class MainWindow : Window, IDisposable
         ImGui.TextUnformatted($"{inspect.AvgItemLevel:0000}");
 
         ImGui.SetCursorPos(startPos with { X = bigImageOffset + scaledImageSize.X - textSize.X - scaledItemLevelSize.X });
-        ImGui.Image(ItemLevelTexture.ImGuiHandle, scaledItemLevelSize);
+        ImGui.Image(ItemLevelTexture.Handle, scaledItemLevelSize);
     }
 
     private void GenerateItemTooltip(Item item)
