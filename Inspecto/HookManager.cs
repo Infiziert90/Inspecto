@@ -88,6 +88,7 @@ public unsafe class HookManager : IDisposable
 
         using var pixelDataStream = new MemoryStream();
         dataStream.CopyTo(pixelDataStream);
+        dataStream.Dispose();
 
         var data = Image.LoadPixelData<Bgra32>(pixelDataStream.ToArray(), desc.Width, desc.Height).ImageToRaw();
         return (data, desc.Width, desc.Height);
