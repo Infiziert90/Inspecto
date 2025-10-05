@@ -5,7 +5,7 @@ using Lumina.Text.ReadOnly;
 
 namespace Inspecto.Data;
 
-public record CharacterInspect
+public record CharacterInspect : IDisposable
 {
     public string Name = string.Empty;
     public uint WorldId;
@@ -32,5 +32,10 @@ public record CharacterInspect
     public Item? GetEquippedGearByIndex(int slotIndex)
     {
         return EquippedGear.Length <= slotIndex ? null : EquippedGear[slotIndex];
+    }
+
+    public void Dispose()
+    {
+        Image.Dispose();
     }
 }

@@ -178,6 +178,9 @@ public sealed class Plugin : IDalamudPlugin
 
                 characterInspect.Added = original.Added;
                 MainWindow.InspectHistory[characterInspect.ContentId] = characterInspect;
+
+                // Dispose of the original to prevent memory leaking
+                original.Dispose();
             }
 
             // Start our refresh timer
@@ -225,7 +228,12 @@ public sealed class Plugin : IDalamudPlugin
                     }
 
                     if (image.Value.Data.Length > 0)
+                    {
+                        // Dispose the original image first to prevent memory leaking
+                        existingEntry.Image.Dispose();
+
                         existingEntry.Image = TextureProvider.CreateFromRaw(RawImageSpecification.Bgra32(image.Value.Width, image.Value.Height), image.Value.Data);
+                    }
 
                     existingEntry.EntityId = 0;
 

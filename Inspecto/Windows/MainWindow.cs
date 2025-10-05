@@ -94,7 +94,17 @@ public class MainWindow : Window, IDisposable
         }
     }
 
-    public void Dispose() { }
+    public void Dispose()
+    {
+        ItemLevelTexture.Dispose();
+        foreach (var textureWrap in ItemFrameTexture)
+            textureWrap.Dispose();
+
+        Miedinger.Dispose();
+
+        foreach (var (_, characterInspect) in InspectHistory)
+            characterInspect.Dispose();
+    }
 
     public override void Draw()
     {
