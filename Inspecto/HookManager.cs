@@ -1,14 +1,12 @@
 ﻿using System;
-using System.IO;
+using System.Runtime.CompilerServices;
 using Dalamud.Hooking;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
 using FFXIVClientStructs.FFXIV.Client.Graphics.Render;
-using SharpDX;
-using SharpDX.Direct3D11;
-using SharpDX.DXGI;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using TerraFX.Interop.DirectX;
 
 namespace Inspecto;
 
@@ -64,33 +62,52 @@ public unsafe class HookManager : IDisposable
         if (tex == null || tex->D3D11Texture2D == null)
             return ([], 0, 0);
 
-        var device = Plugin.PluginInterface.UiBuilder.Device;
-        var texture = CppObject.FromPointer<Texture2D>((nint)tex->D3D11Texture2D);
+        var device = (ID3D11Device*)Plugin.PluginInterface.UiBuilder.DeviceHandle;
+        var texture = (ID3D11Texture2D*)tex->D3D11Texture2D;
 
-        var desc = new Texture2DDescription {
-            ArraySize = 1,
-            BindFlags = BindFlags.None,
-            CpuAccessFlags = CpuAccessFlags.Read,
-            Format = texture.Description.Format,
-            Height = texture.Description.Height,
-            Width = texture.Description.Width,
-            MipLevels = 1,
-            OptionFlags = texture.Description.OptionFlags,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Staging
-        };
+        D3D11_TEXTURE2D_DESC desc;
+        texture->GetDesc(&desc);
 
-        using var stagingTexture = new Texture2D(device, desc);
-        var context = device.ImmediateContext;
+        desc.BindFlags = 0;
+        desc.CPUAccessFlags = (uint)D3D11_CPU_ACCESS_FLAG.D3D11_CPU_ACCESS_READ;
+        desc.Usage = D3D11_USAGE.D3D11_USAGE_STAGING;
+        desc.MiscFlags = 0;
+        desc.MipLevels = 1;
 
-        context.CopyResource(texture, stagingTexture);
-        device.ImmediateContext.MapSubresource(stagingTexture, 0, MapMode.Read, SharpDX.Direct3D11.MapFlags.None, out var dataStream);
+        ID3D11Texture2D* stagingTexture;
+        if (device->CreateTexture2D(&desc, null, &stagingTexture) < 0)
+            return ([], 0, 0);
 
-        using var pixelDataStream = new MemoryStream();
-        dataStream.CopyTo(pixelDataStream);
-        dataStream.Dispose();
+        ID3D11DeviceContext* context;
+        device->GetImmediateContext(&context);
 
-        var data = Image.LoadPixelData<Bgra32>(pixelDataStream.ToArray(), desc.Width, desc.Height).ImageToRaw();
-        return (data, desc.Width, desc.Height);
+        context->CopyResource((ID3D11Resource*)stagingTexture, (ID3D11Resource*)texture);
+
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (context->Map((ID3D11Resource*)stagingTexture, 0, D3D11_MAP.D3D11_MAP_READ, 0, &mapped) < 0)
+        {
+            stagingTexture->Release();
+            return ([], 0, 0);
+        }
+
+        var sourcePtr = (nint)mapped.pData;
+        var rowPitch = mapped.RowPitch;
+        var image = new Image<Bgra32>((int)desc.Width, (int)desc.Height);
+
+        image.ProcessPixelRows(accessor =>
+        {
+            for (var y = 0; y < accessor.Height; y++)
+            {
+                var destSpan = accessor.GetRowSpan(y);
+                var src = (byte*)sourcePtr + y * rowPitch;
+                Buffer.MemoryCopy(src, Unsafe.AsPointer(ref destSpan[0]), destSpan.Length * 4, destSpan.Length * 4);
+            }
+        });
+
+        context->Unmap((ID3D11Resource*)stagingTexture, 0);
+        stagingTexture->Release();
+
+        var data = image.ImageToRaw();
+        return (data, image.Width, image.Height);
     }
 }
